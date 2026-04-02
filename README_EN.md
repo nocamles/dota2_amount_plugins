@@ -10,7 +10,7 @@ In Dota 2, players often need to manually calculate or check the scoreboard to e
 
 ## 📊 Data Sources
 
-1.  **Dota 2 GSI (Game State Integration)**: The core data source. By configuring a GSI file in the Dota 2 client, the app receives JSON packets containing:
+1.  **Dota 2 GSI (Game State Integration)**: The core data source. The application automatically configures the GSI interface in your Dota 2 client when launched, and receives JSON packets containing:
     *   `player`: Real-time gold.
     *   `items`: Item names in all slots.
     *   `hero`: Status of Aghanim's Shard and Scepter buffs.
@@ -18,14 +18,14 @@ In Dota 2, players often need to manually calculate or check the scoreboard to e
 
 ## 🛠️ Tech Stack & Development
 
-*   **UI Framework**: Built with **PyQt6** for high-performance, transparent, and click-through Windows overlays.
-*   **Backend Service**: **Flask** runs a local HTTP server (Port 3000) to receive POST data from Dota 2.
+*   **UI Framework**: Built with **C# WPF** for high-performance, transparent, and click-through Windows overlays.
+*   **Backend Service**: Uses C# built-in networking libraries to run a local HTTP server (Port 3000) to receive POST data from Dota 2.
 *   **State Management**:
     *   **GSI Cache Pool**: Solves the data fluctuation issue caused by GSI's delta updates.
-    *   **Multi-threading**: Separates the Flask server, UI thread, and Dota 2 process monitor.
+    *   **Multi-threading**: Separates the HTTP server, UI thread, and Dota 2 process monitor.
 *   **Interaction**:
-    *   Global hotkey support via the `keyboard` library (Default: `Ctrl+Alt+F10`).
-    *   Persistent configuration (`overlay_config.json`) for window position, lock state, and hotkeys.
+    *   Global hotkey support (Default: `Ctrl+Alt+F10`).
+    *   Persistent configuration (`config.txt`) for window position, lock state, and hotkeys.
 
 ## ✨ Features
 
@@ -35,6 +35,7 @@ In Dota 2, players often need to manually calculate or check the scoreboard to e
     *   Only shows during matches or Demo mode.
 *   **Custom Positioning**: Supports dragging when unlocked; supports click-through when locked to avoid interfering with game clicks.
 *   **Global Hotkey**: Toggle Lock/Unlock state instantly with a key combination.
+*   **Auto GSI Configuration**: No manual setup required. GSI configs are automatically deployed upon running.
 *   **System Tray Support**: Run in background with tray icon for quick settings and exit.
 
 ## 📸 Screenshots
@@ -57,21 +58,9 @@ In Dota 2, players often need to manually calculate or check the scoreboard to e
 
 ## 🚀 Quick Start
 
-### 1. Configure Dota 2 GSI
-1.  Navigate to your Dota 2 installation folder: `game\dota\cfg\`.
-2.  Create a folder named `gamestate_integration` (if it doesn't exist).
-3.  Create a file named `gamestate_integration_networth.cfg` and paste the content from `GSI_Config.txt`.
-
-### 2. Run the Plugin
-1.  Ensure Python is installed.
-2.  Install dependencies:
-    ```bash
-    pip install PyQt6 Flask keyboard
-    ```
-3.  Run the application:
-    ```bash
-    python main.py
-    ```
+### 1. Run the Plugin
+No need to manually configure the Dota 2 GSI; the code configures it automatically.
+Simply place the downloaded `exe` file and `item_price.json` in the **same directory** and double-click to run the executable.
 
 ---
 *This project is for educational purposes. Please comply with Dota 2's Terms of Service.*
