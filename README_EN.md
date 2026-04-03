@@ -63,7 +63,7 @@ In Dota 2, players often need to manually calculate or check the scoreboard to e
 ![吃蓝杖](img/吃蓝杖.png)
 *图:吃蓝杖固定算4200快.
 
-### 7. 游戏内显示效果2
+### 7. 游戏内切换可拖动效果
 ![正常计算总价2](img/正常计算总价2.png)
 
 ## 🚀 Quick Start
