@@ -56,6 +56,16 @@ In Dota 2, players often need to manually calculate or check the scoreboard to e
 ![Tray Menu](img/右键任务栏图标.png)
 *Figure: Right-click the tray icon to modify settings or quit.*
 
+### 5. 游戏内显示效果1
+![正常计算总价](img/正常计算总价.png)
+
+### 6. 吃蓝杖
+![吃蓝杖](img/吃蓝杖.png)
+*图:吃蓝杖固定算4200快.
+
+### 7. 游戏内显示效果2
+![正常计算总价2](img/正常计算总价2.png)
+
 ## 🚀 Quick Start
 
 ### 1. Run the Plugin
