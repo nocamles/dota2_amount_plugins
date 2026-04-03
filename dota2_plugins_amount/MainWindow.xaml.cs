@@ -210,7 +210,37 @@ namespace Dota2NetWorth
                     var root = jss.Deserialize<Dictionary<string, object>>(json);
                     if (root == null) return;
 
-                    bool currentInMatch = root.ContainsKey("player") || root.ContainsKey("hero") || root.ContainsKey("items");
+                    bool currentInMatch = false;
+
+                    // 优先通过 player 节点判断状态
+                    if (root.ContainsKey("player"))
+                    {
+                        var player = root["player"] as Dictionary<string, object>;
+                        if (player != null)
+                        {
+                            // 1. 判断玩家当前活动状态 (对局中是 "playing", 主界面是 "menu")
+                            if (player.ContainsKey("activity") && (player["activity"] as string) == "playing")
+                            {
+                                currentInMatch = true;
+                            }
+                            // 2. 兜底逻辑：如果存在 gold 字段，说明绝对处于游戏对局中
+                            else if (player.ContainsKey("gold"))
+                            {
+                                currentInMatch = true;
+                            }
+                        }
+                    }
+
+                    // 极端情况兜底：如果没有 player 但有 hero 数据且存在具体英雄 id (防止GSI延迟异常)
+                    if (!currentInMatch && root.ContainsKey("hero"))
+                    {
+                        var hero = root["hero"] as Dictionary<string, object>;
+                        if (hero != null && hero.ContainsKey("id"))
+                        {
+                            currentInMatch = true;
+                        }
+                    }
+
                     if (!currentInMatch)
                     {
                         cacheGold = 0; cacheItems.Clear(); cacheShard = false; cacheScepterBuff = false;
