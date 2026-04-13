@@ -12,7 +12,7 @@
             <!-- 金币图标 (确保将 icon.png 放到生成的 exe 目录) -->
             <Image Source="icon.png" Width="24" Height="24" RenderOptions.BitmapScalingMode="HighQuality"/>
             <!-- 资产数字与黑体阴影 -->
-            <TextBlock x:Name="TextLabel" Text="0" Foreground="#F8E8B9" FontSize="16" FontWeight="Bold" Margin="5,0,0,0" VerticalAlignment="Center" Width="80">
+            <TextBlock x:Name="TextLabel" Text="Ready" Foreground="#F8E8B9" FontSize="16" FontWeight="Bold" Margin="5,0,0,0" VerticalAlignment="Center" Width="80">
                 <TextBlock.Effect>
                     <DropShadowEffect BlurRadius="3" Direction="315" ShadowDepth="2" Color="Black" Opacity="1"/>
                 </TextBlock.Effect>

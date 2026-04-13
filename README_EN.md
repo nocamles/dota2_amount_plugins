@@ -1,6 +1,6 @@
-[English](README_EN.md) | [中文](README.md)
+[中文](README.md) | [English](README_EN.md)
 
-# Dota 2 Real-time Net Worth Overlay
+# Dota 2 Net Worth Overlay (Real-time)
 
 A lightweight real-time Net Worth overlay for Dota 2 players. It retrieves live game data via the official **Game State Integration (GSI)** and displays the hero's total net worth (gold, item value, Aghanim's Shard, and Scepter bonuses) in a sleek, floating window.
 
@@ -40,37 +40,38 @@ In Dota 2, players often need to manually calculate or check the scoreboard to e
 
 ## 📸 Screenshots
 
-### 1. In-game Overlay
-![Default Style](img/默认状态样式.png)
-*Figure: Default display during a match.*
-
-### 2. Dragging & Layout
-![Dragging Style](img/拖动状态样式.png)
-*Figure: The window becomes draggable after unlocking.*
-
-### 3. Hotkey Settings
-![Hotkey Settings](img/设置拖动全局快捷键.png)
-*Figure: Customize any key combination as the global toggle.*
-
-### 4. Tray Management
-![Tray Menu](img/右键任务栏图标.png)
-*Figure: Right-click the tray icon to modify settings or quit.*
-
-### 5. 游戏内显示效果1
-![正常计算总价](img/正常计算总价.png)
-
-### 6. 吃蓝杖
-![吃蓝杖](img/吃蓝杖.png)
-*图:吃蓝杖固定算4200快.
-
-### 7. 游戏内切换可拖动效果
-![正常计算总价2](img/正常计算总价2.png)
+| 1. In-game Default Display | 2. Dragging & Layout |
+| :---: | :---: |
+| ![Default Style](img/默认状态样式.png) | ![Dragging Style](img/拖动状态样式.png) |
+| 3. Hotkey Settings | 4. System Tray Management |
+| ![Hotkey Settings](img/设置拖动全局快捷键.png) | ![Tray Menu](img/右键任务栏图标.png) |
+| 5. Net Worth Calculation Example | 6. Special Buffs (e.g., Scepter) |
+| ![Net Worth Example](img/正常计算总价.png) | ![Consumed Scepter](img/吃蓝杖.png) |
 
 ## 🚀 Quick Start
 
 ### 1. Run the Plugin
 No need to manually configure the Dota 2 GSI; the code configures it automatically.
 Simply place the downloaded `exe` file and `item_price.json` in the **same directory** and double-click to run the executable.
+
+### 2. Dota 2 Video Mode
+To allow the overlay to appear on top of the game, Dota 2 must be set to **"Borderless Window"** mode.
+
+---
+
+## 🛡️ Security and VAC Policy
+
+Many players are concerned that using such an overlay might lead to a VAC (Valve Anti-Cheat) ban. **Conclusion: This plugin is 100% safe.**
+
+### Why is it safe?
+
+1.  **Official Legal Interface (GSI)**: This plugin is entirely based on Valve's official **Game State Integration** technology. This is a feature provided by Valve for tournament broadcasts, external data statistics, and peripheral synchronization (like Razer/Logitech RGB lighting).
+2.  **Non-Invasive**: This plugin **does not read memory** and **does not modify any game files**. It works by receiving JSON data packets sent by the game client itself, acting essentially as an external calculator.
+3.  **No Unfair Advantage**: The GSI interface only sends information that you **can already see** in the game (e.g., your own gold and items). It cannot access enemy information hidden in the Fog of War, thus it is not considered cheating.
+
+### Authoritative References
+*   [Valve Developer Community: GSI](https://developer.valvesoftware.com/wiki/Counter-Strike:_Global_Offensive_Game_State_Integration) (Dota 2's GSI uses the same architecture)
+*   If you check your `Dota 2` configuration folder, you will find that drivers from Logitech, Razer, etc., also generate similar GSI configuration files. This plugin uses the exact same mechanism.
 
 ---
 *This project is for educational purposes. Please comply with Dota 2's Terms of Service.*

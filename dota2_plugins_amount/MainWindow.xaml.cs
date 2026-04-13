@@ -38,6 +38,7 @@ namespace Dota2NetWorth
         private uint hotkeyVk = 0x79; // F10
         private string hotkeyName = "Ctrl + Alt + F10";
 
+        private string dotaPath = null;
         private Dictionary<string, int> itemPrices = new Dictionary<string, int>();
         private System.Windows.Forms.NotifyIcon trayIcon;
         private HttpListener gsiListener;
@@ -210,37 +211,7 @@ namespace Dota2NetWorth
                     var root = jss.Deserialize<Dictionary<string, object>>(json);
                     if (root == null) return;
 
-                    bool currentInMatch = false;
-
-                    // 优先通过 player 节点判断状态
-                    if (root.ContainsKey("player"))
-                    {
-                        var player = root["player"] as Dictionary<string, object>;
-                        if (player != null)
-                        {
-                            // 1. 判断玩家当前活动状态 (对局中是 "playing", 主界面是 "menu")
-                            if (player.ContainsKey("activity") && (player["activity"] as string) == "playing")
-                            {
-                                currentInMatch = true;
-                            }
-                            // 2. 兜底逻辑：如果存在 gold 字段，说明绝对处于游戏对局中
-                            else if (player.ContainsKey("gold"))
-                            {
-                                currentInMatch = true;
-                            }
-                        }
-                    }
-
-                    // 极端情况兜底：如果没有 player 但有 hero 数据且存在具体英雄 id (防止GSI延迟异常)
-                    if (!currentInMatch && root.ContainsKey("hero"))
-                    {
-                        var hero = root["hero"] as Dictionary<string, object>;
-                        if (hero != null && hero.ContainsKey("id"))
-                        {
-                            currentInMatch = true;
-                        }
-                    }
-
+                    bool currentInMatch = root.ContainsKey("player") || root.ContainsKey("hero") || root.ContainsKey("items");
                     if (!currentInMatch)
                     {
                         cacheGold = 0; cacheItems.Clear(); cacheShard = false; cacheScepterBuff = false;
@@ -336,16 +307,26 @@ namespace Dota2NetWorth
                 if (File.Exists("config.txt"))
                 {
                     var parts = File.ReadAllText("config.txt").Split(',');
-                    this.Left = double.Parse(parts[0]);
-                    this.Top = double.Parse(parts[1]);
+                    double l = double.Parse(parts[0]);
+                    double t = double.Parse(parts[1]);
+
+                    // 检查是否在屏幕内，防止带鱼屏/多屏切换后窗口丢失
+                    if (l < 0 || l > SystemParameters.VirtualScreenWidth - 100) l = 200;
+                    if (t < 0 || t > SystemParameters.VirtualScreenHeight - 40) t = 60;
+
+                    this.Left = l;
+                    this.Top = t;
                     this.isLocked = bool.Parse(parts[2]);
 
-                    // 兼容读取新加入的快捷键配置
                     if (parts.Length >= 6)
                     {
                         hotkeyMods = uint.Parse(parts[3]);
                         hotkeyVk = uint.Parse(parts[4]);
                         hotkeyName = parts[5];
+                    }
+                    if (parts.Length >= 7)
+                    {
+                        dotaPath = parts[6];
                     }
                 }
                 else { this.Left = 200; this.Top = 60; }
@@ -355,56 +336,205 @@ namespace Dota2NetWorth
 
         private void SaveConfig()
         {
-            try { File.WriteAllText("config.txt", string.Format("{0},{1},{2},{3},{4},{5}", this.Left, this.Top, this.isLocked, hotkeyMods, hotkeyVk, hotkeyName)); } catch { }
+            try 
+            {
+                // 保存前确保坐标有效
+                double l = this.Left;
+                double t = this.Top;
+                File.WriteAllText("config.txt", string.Format("{0},{1},{2},{3},{4},{5},{6}", l, t, this.isLocked, hotkeyMods, hotkeyVk, hotkeyName, dotaPath)); 
+            } 
+            catch { }
         }
 
         private void EnsureGsiConfigExists()
         {
+            // 先尝试从缓存配置读取并验证
+            bool needsDetection = string.IsNullOrEmpty(dotaPath) || !Directory.Exists(dotaPath);
+            
+            if (needsDetection)
+            {
+                dotaPath = AutoDetectDotaPath();
+            }
+
+            if (string.IsNullOrEmpty(dotaPath) || !Directory.Exists(dotaPath))
+            {
+                var result = MessageBox.Show(
+                    "未自动找到 Dota 2 安装路径。\n\n是否手动选择 dota2.exe 所在目录？\n(如果不配置此项，助手将无法获取游戏内资产数据)", 
+                    "Dota2 资产助手 - 路径未找到", 
+                    MessageBoxButton.YesNo, 
+                    MessageBoxImage.Question);
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    dotaPath = ManuallySelectDotaPath();
+                }
+            }
+
+            if (!string.IsNullOrEmpty(dotaPath) && Directory.Exists(dotaPath))
+            {
+                string targetPath;
+                string cfgContent;
+                if (TryCreateGsiFile(dotaPath, out targetPath, out cfgContent))
+                {
+                    SaveConfig(); // 成功则保存路径
+                }
+                else
+                {
+                    try { Clipboard.SetText(cfgContent); } catch { } // 将内容写入剪贴板
+                    
+                    string errorMsg = string.Format(
+                        "无法自动创建 GSI 配置文件。\n\n" +
+                        "【目标路径】\n{0}\n\n" +
+                        "可能是权限不足或杀毒软件拦截。\n" +
+                        "为了不影响使用，配置内容已自动【复制到您的剪贴板】。\n\n" +
+                        "【手动解决步骤】\n" +
+                        "1. 手动打开上述路径（如果文件夹不存在请新建）。\n" +
+                        "2. 新建一个文本文件，将剪贴板内容粘贴进去并保存。\n" +
+                        "3. 将文件名修改为：gamestate_integration_networth.cfg\n\n" +
+                        "(或者完全退出软件，右键选择“以管理员身份运行”重试)", 
+                        targetPath);
+
+                    MessageBox.Show(errorMsg, "配置创建失败 - 需手动处理", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+        }
+
+        private bool TryCreateGsiFile(string path, out string outCfgPath, out string outCfgContent)
+        {
+            string gsiFolder = Path.Combine(path, "game", "dota", "cfg", "gamestate_integration");
+            
+            // 兼容处理：防呆设计，处理用户选偏了目录的情况
+            if (path.EndsWith("dota", StringComparison.OrdinalIgnoreCase) && Directory.Exists(Path.Combine(path, "cfg")))
+            {
+                 gsiFolder = Path.Combine(path, "cfg", "gamestate_integration");
+            }
+            else if (path.EndsWith("game", StringComparison.OrdinalIgnoreCase) && Directory.Exists(Path.Combine(path, "dota", "cfg")))
+            {
+                 gsiFolder = Path.Combine(path, "dota", "cfg", "gamestate_integration");
+            }
+
+            outCfgPath = Path.Combine(gsiFolder, "gamestate_integration_networth.cfg");
+            outCfgContent = @"""Dota 2 Net Worth""
+{
+    ""uri""           ""http://127.0.0.1:3000/""
+    ""timeout""       ""5.0""
+    ""buffer""        ""0.1""
+    ""throttle""      ""0.1""
+    ""heartbeat""     ""10.0""
+    ""data""
+    {
+        ""items""     ""1""
+        ""player""    ""1""
+        ""hero""      ""1""
+    }
+}";
+
+            try
+            {
+                if (!Directory.Exists(gsiFolder)) Directory.CreateDirectory(gsiFolder);
+                File.WriteAllText(outCfgPath, outCfgContent);
+                return true;
+            }
+            catch
+            {
+                return false; // 写入失败，通常为权限问题
+            }
+        }
+
+        private string AutoDetectDotaPath()
+        {
             try
             {
                 string path = null;
+                string steamPath = null;
+
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam"))
+                {
+                    if (key != null) steamPath = key.GetValue("SteamPath") as string;
+                }
+
+                if (!string.IsNullOrEmpty(steamPath))
+                {
+                    steamPath = steamPath.Replace("/", "\\");
+                    string defaultLibrary = Path.Combine(steamPath, "steamapps", "common", "dota 2 beta");
+                    if (Directory.Exists(defaultLibrary)) return defaultLibrary;
+
+                    // 增强：尝试解析 steamapps\libraryfolders.vdf，应对游戏安装在非默认盘符的情况
+                    string vdfPath = Path.Combine(steamPath, "steamapps", "libraryfolders.vdf");
+                    if (File.Exists(vdfPath))
+                    {
+                        string[] lines = File.ReadAllLines(vdfPath);
+                        string currentLibraryPath = null;
+                        foreach (string line in lines)
+                        {
+                            if (line.Contains("\"path\""))
+                            {
+                                int start = line.IndexOf("\"path\"") + 6;
+                                int firstQuote = line.IndexOf('"', start);
+                                int lastQuote = line.IndexOf('"', firstQuote + 1);
+                                if (firstQuote != -1 && lastQuote != -1)
+                                {
+                                    currentLibraryPath = line.Substring(firstQuote + 1, lastQuote - firstQuote - 1).Replace("\\\\", "\\");
+                                }
+                            }
+                            // 570 是 Dota 2 的 AppID
+                            if (line.Contains("\"570\"") && !string.IsNullOrEmpty(currentLibraryPath))
+                            {
+                                string possiblePath = Path.Combine(currentLibraryPath, "steamapps", "common", "dota 2 beta");
+                                if (Directory.Exists(possiblePath)) return possiblePath;
+                            }
+                        }
+                    }
+                }
+
+                // 备选方案：通过卸载注册表寻找 (32位和64位)
                 string regPath = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Steam App 570";
                 using (RegistryKey key = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64))
                 {
                     using (RegistryKey subkey = key.OpenSubKey(regPath))
-                    {
                         if (subkey != null) path = subkey.GetValue("InstallLocation") as string;
-                    }
                 }
+
                 if (string.IsNullOrEmpty(path))
                 {
                     using (RegistryKey key = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32))
                     {
                         using (RegistryKey subkey = key.OpenSubKey(regPath))
-                        {
                             if (subkey != null) path = subkey.GetValue("InstallLocation") as string;
-                        }
                     }
                 }
 
-                if (string.IsNullOrEmpty(path)) return;
-
-                string gsiFolder = Path.Combine(path, "game", "dota", "cfg", "gamestate_integration");
-                if (!Directory.Exists(gsiFolder)) Directory.CreateDirectory(gsiFolder);
-
-                string cfgPath = Path.Combine(gsiFolder, "gamestate_integration_networth.cfg");
-                string cfgContent = @"""Dota 2 Net Worth""
-                                        {
-                                            ""uri""           ""http://127.0.0.1:3000/""
-                                            ""timeout""       ""5.0""
-                                            ""buffer""        ""0.1""
-                                            ""throttle""      ""0.5""
-                                            ""heartbeat""     ""10.0""
-                                            ""data""
-                                            {
-                                                ""items""     ""1""
-                                                ""player""    ""1""
-                                                ""hero""      ""1""
-                                            }
-                                        }";
-                if (!File.Exists(cfgPath)) File.WriteAllText(cfgPath, cfgContent);
+                if (!string.IsNullOrEmpty(path) && Directory.Exists(path)) return path;
             }
             catch { }
+            return null;
+        }
+
+        private string ManuallySelectDotaPath()
+        {
+            Microsoft.Win32.OpenFileDialog ofd = new Microsoft.Win32.OpenFileDialog();
+            ofd.Filter = "Dota 2 可执行文件 (dota2.exe)|dota2.exe|所有文件 (*.*)|*.*";
+            ofd.Title = "请找到并选择 dota2.exe (通常位于 steamapps\\common\\dota 2 beta\\game\\bin\\win64\\)";
+            
+            if (ofd.ShowDialog() == true)
+            {
+                string path = Path.GetDirectoryName(ofd.FileName);
+                DirectoryInfo di = new DirectoryInfo(path);
+                // 向上追溯，提取出正确的 dota 2 beta 目录，防呆
+                while (di != null)
+                {
+                    if (di.Name.Equals("dota 2 beta", StringComparison.OrdinalIgnoreCase) || 
+                       (di.Name.Equals("game", StringComparison.OrdinalIgnoreCase) && Directory.Exists(Path.Combine(di.FullName, "dota", "cfg"))))
+                    {
+                        if (di.Name.Equals("game", StringComparison.OrdinalIgnoreCase))
+                            return di.Parent.FullName;
+                        return di.FullName;
+                    }
+                    di = di.Parent;
+                }
+                return path; // 若都没匹配，返回所在目录让 TryCreate 容错处理
+            }
+            return null;
         }
 
         private void InitTrayIcon()
