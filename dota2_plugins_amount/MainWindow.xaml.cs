@@ -34,6 +34,12 @@ namespace Dota2NetWorth
         private bool inMatch = false;
         private int myTeamSlot = -1;
 
+        // --- 影子缓存状态 ---
+        private bool isFirstTick = true;
+        private int lastRawNetWorth = 0;
+        private List<string> lastItems = new List<string>();
+        private List<string> ghostItems = new List<string>();
+
         // --- 快捷键配置 (默认 Ctrl+Alt+F10) ---
         private uint hotkeyMods = 0x0001 | 0x0002; // Alt + Ctrl
         private uint hotkeyVk = 0x79; // F10

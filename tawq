@@ -1,0 +1,73 @@
+[33mcommit d27d3a7ea6f4d867e054fc6a8e954a4552117e18[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m
+Author: yanghong <cs16xiaoc1@163.com>
+Date:   Mon Apr 20 18:12:09 2026 +0800
+
+    fix issue#1  添加影子追踪逻辑，如果装备进入信使和丢地上暂存。（缺陷如果被A掉了就卡住了）
+
+[33mcommit ecb0244519da5de81106c036cb499190c49c1dc2[m
+Author: yanghong <cs16xiaoc1@163.com>
+Date:   Mon Apr 13 17:15:43 2026 +0800
+
+    添加创建GSI配置文件失败提醒。readme更新
+
+[33mcommit 70b25fd77e88278f13fbcc37dd3da4f578c6e1c8[m
+Author: 杨洪 <56705974+nocamles@users.noreply.github.com>
+Date:   Mon Apr 13 16:14:23 2026 +0800
+
+    Add safety explanation for VAC bans in README
+    
+    Added a detailed explanation about the safety and legality of the plugin regarding VAC bans, including its reliance on Valve's Game State Integration (GSI) and its non-invasive nature.
+
+[33mcommit 9f4e71733a0d33af1994817bf692b44e9c6b861c[m
+Author: yanghong <cs16xiaoc1@163.com>
+Date:   Fri Apr 3 10:52:28 2026 +0800
+
+    修改readme文字描述
+
+[33mcommit 0a98f89f6425d57f7432bf7005e87694aa5089e4[m
+Author: yanghong <cs16xiaoc1@163.com>
+Date:   Fri Apr 3 10:50:54 2026 +0800
+
+    更新游戏内显示效果
+
+[33mcommit 6fc5e42dc095054aec22e7a918fe718d0ddbaded[m
+Author: yanghong <cs16xiaoc1@163.com>
+Date:   Fri Apr 3 10:45:47 2026 +0800
+
+    优化是否在游戏中的判断，修复退出游戏后主页面还显示插件
+
+[33mcommit 33738ba5a1a1ee60c4f400ef022db7c64ced8a42[m[33m ([m[1;33mtag: [m[1;33m1.0[m[33m)[m
+Author: yanghong <cs16xiaoc1@163.com>
+Date:   Thu Apr 2 16:48:15 2026 +0800
+
+    readme 漏掉的图片
+
+[33mcommit c01b7263a49b5381ff9ba83c737d8890a5c17032[m
+Author: yanghong <cs16xiaoc1@163.com>
+Date:   Thu Apr 2 16:44:11 2026 +0800
+
+    代码用C#实现，实现自动修改dota2 GSI配置
+
+[33mcommit 2965b1285fe5d7e45e29cdcd2803c2261bcc1b7c[m
+Author: yanghong <cs16xiaoc1@163.com>
+Date:   Thu Apr 2 11:53:14 2026 +0800
+
+    将python代码打包成可执行的exe程序
+
+[33mcommit e4fd6521a0dc025fcf7d88e2b75549fdb79a0581[m
+Author: yanghong <cs16xiaoc1@163.com>
+Date:   Thu Apr 2 11:32:38 2026 +0800
+
+    readme 添加
+
+[33mcommit 71bb02b5a808dd4d7a043b0dfeed086b7a273094[m
+Author: yanghong <cs16xiaoc1@163.com>
+Date:   Thu Apr 2 11:27:00 2026 +0800
+
+    init commit.
+
+[33mcommit fada36ace3dac6d3178ae642eb011454fe7a132c[m
+Author: 杨洪 <56705974+nocamles@users.noreply.github.com>
+Date:   Thu Apr 2 11:26:00 2026 +0800
+
+    Initial commit
