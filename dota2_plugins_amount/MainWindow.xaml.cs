@@ -32,6 +32,7 @@ namespace Dota2NetWorth
         private bool isLocked = true;
         private bool isDotaRunning = false;
         private bool inMatch = false;
+        private int myTeamSlot = -1;
 
         // --- 快捷键配置 (默认 Ctrl+Alt+F10) ---
         private uint hotkeyMods = 0x0001 | 0x0002; // Alt + Ctrl
@@ -42,11 +43,6 @@ namespace Dota2NetWorth
         private Dictionary<string, int> itemPrices = new Dictionary<string, int>();
         private System.Windows.Forms.NotifyIcon trayIcon;
         private HttpListener gsiListener;
-
-        private int cacheGold = 0;
-        private bool cacheShard = false;
-        private bool cacheScepterBuff = false;
-        private Dictionary<string, string> cacheItems = new Dictionary<string, string>();
 
         public MainWindow()
         {
@@ -214,71 +210,214 @@ namespace Dota2NetWorth
                     bool currentInMatch = root.ContainsKey("player") || root.ContainsKey("hero") || root.ContainsKey("items");
                     if (!currentInMatch)
                     {
-                        cacheGold = 0; cacheItems.Clear(); cacheShard = false; cacheScepterBuff = false;
+                        myTeamSlot = -1;
+                        isFirstTick = true;
+                        lastRawNetWorth = 0;
+                        lastItems.Clear();
+                        ghostItems.Clear();
                         if (inMatch) { inMatch = false; ApplyLockState(); }
                         return;
                     }
 
                     if (!inMatch) { inMatch = true; ApplyLockState(); }
 
-                    if (root.ContainsKey("player"))
-                    {
-                        var player = root["player"] as Dictionary<string, object>;
-                        if (player != null && player.ContainsKey("gold")) cacheGold = Convert.ToInt32(player["gold"]);
-                    }
+                    List<string> currItemsList;
+                    int currRawNetWorth = CalculateNetWorth(root, out currItemsList);
 
-                    if (root.ContainsKey("items"))
+                    if (isFirstTick)
                     {
-                        var items = root["items"] as Dictionary<string, object>;
-                        if (items != null)
+                        lastRawNetWorth = currRawNetWorth;
+                        lastItems = currItemsList;
+                        isFirstTick = false;
+                    }
+                    else
+                    {
+                        var missingItems = new List<string>();
+                        var tempCurr = new List<string>(currItemsList);
+                        foreach (var oldItem in lastItems)
                         {
-                            for (int i = 0; i < 9; i++)
+                            if (tempCurr.Contains(oldItem)) tempCurr.Remove(oldItem);
+                            else missingItems.Add(oldItem);
+                        }
+                        var appearedItems = tempCurr;
+
+                        int deltaRawNW = currRawNetWorth - lastRawNetWorth;
+
+                        // 1. 移除已经重新出现的影子装备
+                        foreach (var appeared in appearedItems)
+                        {
+                            if (ghostItems.Contains(appeared))
                             {
-                                string slot = "slot" + i;
-                                if (items.ContainsKey(slot))
-                                {
-                                    var itemData = items[slot] as Dictionary<string, object>;
-                                    if (itemData != null && itemData.ContainsKey("name"))
-                                    {
-                                        string name = itemData["name"] as string;
-                                        cacheItems[slot] = string.IsNullOrEmpty(name) ? "empty" : name;
-                                    }
-                                    else cacheItems[slot] = "empty";
-                                }
+                                ghostItems.Remove(appeared);
                             }
                         }
-                    }
 
-                    if (root.ContainsKey("hero"))
-                    {
-                        var hero = root["hero"] as Dictionary<string, object>;
-                        if (hero != null)
+                        // 2. 判断消失的装备是否进入了信使/丢在地上
+                        foreach (var missing in missingItems)
                         {
-                            if (hero.ContainsKey("aghanims_shard")) cacheShard = Convert.ToBoolean(hero["aghanims_shard"]);
-                            if (hero.ContainsKey("aghanims_scepter")) cacheScepterBuff = Convert.ToBoolean(hero["aghanims_scepter"]);
+                            if (IsConsumable(missing)) continue;
+
+                            int cost = GetItemCost("item_" + missing);
+                            // 价格大于0，且总资产出现了与该物品价格相符的下跌 (跌幅大于75%，过滤掉半价出售的情况)
+                            if (cost > 0 && deltaRawNW <= -(cost * 0.75))
+                            {
+                                ghostItems.Add(missing);
+                                deltaRawNW += cost; // 补偿跌幅，以便同时判断多个物品
+                            }
                         }
+
+                        lastRawNetWorth = currRawNetWorth;
+                        lastItems = currItemsList;
                     }
 
-                    int totalNetWorth = cacheGold;
-                    bool hasScepterItem = false;
-
-                    foreach (var item in cacheItems.Values)
+                    int totalNetWorth = currRawNetWorth;
+                    foreach (var ghost in ghostItems)
                     {
-                        if (item != "empty")
-                        {
-                            string apiName = item.Replace("item_", "");
-                            if (apiName == "ultimate_scepter") hasScepterItem = true;
-                            if (itemPrices.ContainsKey(apiName)) totalNetWorth += itemPrices[apiName];
-                        }
+                        totalNetWorth += GetItemCost("item_" + ghost);
                     }
-
-                    if (cacheShard) totalNetWorth += 1400;
-                    if (cacheScepterBuff && !hasScepterItem) totalNetWorth += 4200;
 
                     Dispatcher.Invoke(new Action(() => TextLabel.Text = totalNetWorth.ToString("N0")));
                 }
                 catch { }
             }
+        }
+
+        private int CalculateNetWorth(Dictionary<string, object> root, out List<string> currItemsList)
+        {
+            int netWorth = 0;
+            currItemsList = new List<string>();
+
+            // 1. 现金
+            if (root.ContainsKey("player"))
+            {
+                var player = root["player"] as Dictionary<string, object>;
+                if (player != null)
+                {
+                    if (player.ContainsKey("gold")) netWorth += Convert.ToInt32(player["gold"]);
+                    if (player.ContainsKey("team_slot")) myTeamSlot = Convert.ToInt32(player["team_slot"]);
+                }
+            }
+
+            // 2. 物品 (身上 + 储藏栏)
+            if (root.ContainsKey("items"))
+            {
+                var items = root["items"] as Dictionary<string, object>;
+                if (items != null)
+                {
+                    foreach (var kvp in items)
+                    {
+                        // slot0-8, stash0-5, 排除 neutral0
+                        if (!kvp.Key.StartsWith("slot") && !kvp.Key.StartsWith("stash")) continue;
+                        
+                        var itemData = kvp.Value as Dictionary<string, object>;
+                        if (itemData == null || !itemData.ContainsKey("name")) continue;
+
+                        string name = itemData["name"] as string;
+                        if (string.IsNullOrEmpty(name) || name == "empty") continue;
+
+                        // 归属权校验
+                        if (itemData.ContainsKey("purchaser"))
+                        {
+                            int purchaser = Convert.ToInt32(itemData["purchaser"]);
+                            // 如果不是自己的装备，且不是圣剑/宝石，则不计费
+                            if (purchaser != myTeamSlot)
+                            {
+                                if (!name.Contains("rapier") && !name.Contains("gem")) continue;
+                            }
+                        }
+
+                        string apiName = name.Replace("item_", "");
+                        currItemsList.Add(apiName);
+
+                        int cost = GetItemCost(name);
+                        int charges = 1;
+                        if (itemData.ContainsKey("charges")) charges = Convert.ToInt32(itemData["charges"]);
+
+                        netWorth += cost * charges;
+                    }
+                }
+            }
+
+            // 3. 永久 Buff (A杖、魔晶、银月)
+            if (root.ContainsKey("hero"))
+            {
+                var hero = root["hero"] as Dictionary<string, object>;
+                if (hero != null)
+                {
+                    // 魔晶
+                    if (hero.ContainsKey("aghanims_shard") && Convert.ToBoolean(hero["aghanims_shard"]))
+                    {
+                        netWorth += GetItemCost("item_aghanims_shard");
+                    }
+
+                    // A 杖 (被吃掉的状态)
+                    if (hero.ContainsKey("aghanims_scepter") && Convert.ToBoolean(hero["aghanims_scepter"]))
+                    {
+                        // 检查身上是否有 A 杖，如果没有，说明是吃掉的 Buff
+                        if (!HasItem(root, "item_ultimate_scepter"))
+                        {
+                            int scepterCost = GetItemCost("item_ultimate_scepter_2");
+                            if (scepterCost == 0) scepterCost = GetItemCost("item_ultimate_scepter"); // 兜底查普通 A 杖
+                            netWorth += scepterCost;
+                        }
+                    }
+
+                    // 银月 (消耗)
+                    if (hero.ContainsKey("permanent_buffs"))
+                    {
+                        var buffs = hero["permanent_buffs"] as System.Collections.ArrayList;
+                        if (buffs != null)
+                        {
+                            foreach (Dictionary<string, object> buff in buffs)
+                            {
+                                if (buff.ContainsKey("name") && buff["name"].ToString() == "modifier_item_moon_shard_consumed")
+                                {
+                                    netWorth += GetItemCost("item_moon_shard");
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            return netWorth;
+        }
+
+        private bool HasItem(Dictionary<string, object> root, string itemName)
+        {
+            if (!root.ContainsKey("items")) return false;
+            var items = root["items"] as Dictionary<string, object>;
+            if (items == null) return false;
+
+            foreach (var kvp in items)
+            {
+                if (!kvp.Key.StartsWith("slot") && !kvp.Key.StartsWith("stash")) continue;
+                var itemData = kvp.Value as Dictionary<string, object>;
+                if (itemData != null && itemData.ContainsKey("name") && itemData["name"].ToString() == itemName) return true;
+            }
+            return false;
+        }
+
+        private int GetItemCost(string itemName)
+        {
+            string apiName = itemName.Replace("item_", "");
+            if (itemPrices.ContainsKey(apiName)) return itemPrices[apiName];
+            return 0;
+        }
+
+        private bool IsConsumable(string name)
+        {
+            string[] consumables = {
+                "tango", "tango_single", "clarity", "flask",
+                "ward_observer", "ward_sentry", "ward_dispenser",
+                "smoke_of_deceit", "dust", "tpscroll",
+                "infused_raindrop", "blood_grenade",
+                "cheese", "aegis", "refresher_shard", "royal_jelly",
+                "moon_shard", "aghanims_shard", "ultimate_scepter_2",
+                "tome_of_knowledge", "courier", "flying_courier", "bottle"
+            };
+            return Array.IndexOf(consumables, name) >= 0;
         }
 
         private void LoadItemPrices()
