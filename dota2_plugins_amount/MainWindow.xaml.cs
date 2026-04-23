@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
-using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
@@ -33,20 +32,22 @@ namespace Dota2NetWorth
         private bool isDotaRunning = false;
         private bool inMatch = false;
 
-        // --- 快捷键配置 (默认 Ctrl+Alt+F10) ---
-        private uint hotkeyMods = 0x0001 | 0x0002; // Alt + Ctrl
-        private uint hotkeyVk = 0x79; // F10
-        private string hotkeyName = "Ctrl + Alt + F10";
+        // --- 固定快捷键 Ctrl+Alt+F10 ---
+        private const uint HOTKEY_MODS = 0x0001 | 0x0002; // Alt + Ctrl
+        private const uint HOTKEY_VK = 0x79; // F10
 
         private string dotaPath = null;
         private Dictionary<string, int> itemPrices = new Dictionary<string, int>();
-        private System.Windows.Forms.NotifyIcon trayIcon;
+        private Dictionary<string, bool> itemIsConsumable = new Dictionary<string, bool>();
+        private Dictionary<string, int> itemMaxCharges = new Dictionary<string, int>();
         private HttpListener gsiListener;
 
         private int cacheGold = 0;
         private bool cacheShard = false;
         private bool cacheScepterBuff = false;
+        private bool cacheMoonShard = false;
         private Dictionary<string, string> cacheItems = new Dictionary<string, string>();
+        private Dictionary<string, int> cacheItemCharges = new Dictionary<string, int>();
 
         public MainWindow()
         {
@@ -54,7 +55,7 @@ namespace Dota2NetWorth
             LoadConfig();
             LoadItemPrices();
             EnsureGsiConfigExists();
-            InitTrayIcon();
+            EnsureAutoStart();
 
             StartGsiServer();
             StartProcessMonitor();
@@ -66,17 +67,8 @@ namespace Dota2NetWorth
             IntPtr handle = new WindowInteropHelper(this).Handle;
             HwndSource.FromHwnd(handle)?.AddHook(HwndHook);
 
-            // 首次注册记忆的快捷键
-            RegisterCurrentHotkey();
+            RegisterHotKey(handle, HOTKEY_ID, HOTKEY_MODS, HOTKEY_VK);
             ApplyLockState();
-        }
-
-        // --- 快捷键动态注册与解绑逻辑 ---
-        private void RegisterCurrentHotkey()
-        {
-            IntPtr handle = new WindowInteropHelper(this).Handle;
-            UnregisterHotKey(handle, HOTKEY_ID); // 先解绑旧的
-            RegisterHotKey(handle, HOTKEY_ID, hotkeyMods, hotkeyVk); // 注册新的
         }
 
         private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -88,26 +80,6 @@ namespace Dota2NetWorth
                 handled = true;
             }
             return IntPtr.Zero;
-        }
-
-        // 打开快捷键设置弹窗
-        private void OpenHotkeyDialog()
-        {
-            var dialog = new HotkeyWindow(hotkeyName);
-            dialog.ShowDialog();
-
-            if (dialog.IsSuccess)
-            {
-                hotkeyMods = dialog.Modifiers;
-                hotkeyVk = dialog.VirtualKey;
-                hotkeyName = dialog.HotkeyName;
-
-                RegisterCurrentHotkey(); // 重新向系统注册新快捷键
-                SaveConfig();            // 永久保存
-
-                // 更新右下角托盘的显示文字
-                trayIcon.ContextMenuStrip.Items[0].Text = string.Format("修改快捷键 (当前: {0})", hotkeyName);
-            }
         }
 
         // --- 以下为原有的 UI 与 GSI 逻辑保持不变 ---
@@ -211,10 +183,19 @@ namespace Dota2NetWorth
                     var root = jss.Deserialize<Dictionary<string, object>>(json);
                     if (root == null) return;
 
-                    bool currentInMatch = root.ContainsKey("player") || root.ContainsKey("hero") || root.ContainsKey("items");
+                    bool currentInMatch = false;
+                    if (root.ContainsKey("hero"))
+                    {
+                        var heroProbe = root["hero"] as Dictionary<string, object>;
+                        if (heroProbe != null && heroProbe.ContainsKey("name"))
+                        {
+                            var heroName = heroProbe["name"] as string;
+                            currentInMatch = !string.IsNullOrEmpty(heroName);
+                        }
+                    }
                     if (!currentInMatch)
                     {
-                        cacheGold = 0; cacheItems.Clear(); cacheShard = false; cacheScepterBuff = false;
+                        cacheGold = 0; cacheItems.Clear(); cacheItemCharges.Clear(); cacheShard = false; cacheScepterBuff = false; cacheMoonShard = false;
                         if (inMatch) { inMatch = false; ApplyLockState(); }
                         return;
                     }
@@ -232,9 +213,12 @@ namespace Dota2NetWorth
                         var items = root["items"] as Dictionary<string, object>;
                         if (items != null)
                         {
-                            for (int i = 0; i < 9; i++)
+                            var slotKeys = new List<string>();
+                            for (int i = 0; i < 9; i++) slotKeys.Add("slot" + i);
+                            for (int i = 0; i < 6; i++) slotKeys.Add("stash" + i);
+
+                            foreach (string slot in slotKeys)
                             {
-                                string slot = "slot" + i;
                                 if (items.ContainsKey(slot))
                                 {
                                     var itemData = items[slot] as Dictionary<string, object>;
@@ -242,8 +226,14 @@ namespace Dota2NetWorth
                                     {
                                         string name = itemData["name"] as string;
                                         cacheItems[slot] = string.IsNullOrEmpty(name) ? "empty" : name;
+                                        if (itemData.ContainsKey("charges"))
+                                        {
+                                            try { cacheItemCharges[slot] = Convert.ToInt32(itemData["charges"]); }
+                                            catch { cacheItemCharges.Remove(slot); }
+                                        }
+                                        else cacheItemCharges.Remove(slot);
                                     }
-                                    else cacheItems[slot] = "empty";
+                                    else { cacheItems[slot] = "empty"; cacheItemCharges.Remove(slot); }
                                 }
                             }
                         }
@@ -254,26 +244,46 @@ namespace Dota2NetWorth
                         var hero = root["hero"] as Dictionary<string, object>;
                         if (hero != null)
                         {
-                            if (hero.ContainsKey("aghanims_shard")) cacheShard = Convert.ToBoolean(hero["aghanims_shard"]);
-                            if (hero.ContainsKey("aghanims_scepter")) cacheScepterBuff = Convert.ToBoolean(hero["aghanims_scepter"]);
+                            cacheShard = false; cacheScepterBuff = false; cacheMoonShard = false;
+                            if (hero.ContainsKey("permanent_buffs"))
+                            {
+                                var buffs = hero["permanent_buffs"] as Dictionary<string, object>;
+                                if (buffs != null)
+                                {
+                                    if (buffs.ContainsKey("modifier_item_aghanims_shard")) cacheShard = true;
+                                    if (buffs.ContainsKey("modifier_item_ultimate_scepter_consumed")) cacheScepterBuff = true;
+                                    if (buffs.ContainsKey("modifier_item_moon_shard_consumed")) cacheMoonShard = true;
+                                }
+                            }
                         }
                     }
 
                     int totalNetWorth = cacheGold;
-                    bool hasScepterItem = false;
 
-                    foreach (var item in cacheItems.Values)
+                    foreach (var kv in cacheItems)
                     {
-                        if (item != "empty")
+                        string slot = kv.Key;
+                        string item = kv.Value;
+                        if (item == "empty") continue;
+
+                        string apiName = item.Replace("item_", "");
+                        if (!itemPrices.ContainsKey(apiName)) continue;
+
+                        int price = itemPrices[apiName];
+                        bool isConsumable = itemIsConsumable.ContainsKey(apiName) && itemIsConsumable[apiName];
+                        if (isConsumable && itemMaxCharges.ContainsKey(apiName) && cacheItemCharges.ContainsKey(slot))
                         {
-                            string apiName = item.Replace("item_", "");
-                            if (apiName == "ultimate_scepter") hasScepterItem = true;
-                            if (itemPrices.ContainsKey(apiName)) totalNetWorth += itemPrices[apiName];
+                            int maxCh = itemMaxCharges[apiName];
+                            int curCh = cacheItemCharges[slot];
+                            if (maxCh > 0 && curCh >= 0 && curCh <= maxCh)
+                                price = price * curCh / maxCh;
                         }
+                        totalNetWorth += price;
                     }
 
-                    if (cacheShard) totalNetWorth += 1400;
-                    if (cacheScepterBuff && !hasScepterItem) totalNetWorth += 4200;
+                    if (cacheShard && itemPrices.ContainsKey("aghanims_shard")) totalNetWorth += itemPrices["aghanims_shard"];
+                    if (cacheScepterBuff && itemPrices.ContainsKey("ultimate_scepter")) totalNetWorth += itemPrices["ultimate_scepter"];
+                    if (cacheMoonShard && itemPrices.ContainsKey("moon_shard")) totalNetWorth += itemPrices["moon_shard"];
 
                     Dispatcher.Invoke(new Action(() => TextLabel.Text = totalNetWorth.ToString("N0")));
                 }
@@ -294,6 +304,23 @@ namespace Dota2NetWorth
                     {
                         var valDict = kvp.Value as Dictionary<string, object>;
                         if (valDict != null && valDict.ContainsKey("cost")) itemPrices[kvp.Key] = Convert.ToInt32(valDict["cost"]);
+                        if (valDict != null && valDict.ContainsKey("qual"))
+                        {
+                            itemIsConsumable[kvp.Key] = (valDict["qual"] as string) == "consumable";
+                        }
+                        if (valDict != null && valDict.ContainsKey("charges"))
+                        {
+                            var ch = valDict["charges"];
+                            if (ch is int || ch is long || ch is double || ch is decimal)
+                            {
+                                try
+                                {
+                                    int maxCh = Convert.ToInt32(ch);
+                                    if (maxCh > 0) itemMaxCharges[kvp.Key] = maxCh;
+                                }
+                                catch { }
+                            }
+                        }
                     }
                 }
             }
@@ -318,15 +345,14 @@ namespace Dota2NetWorth
                     this.Top = t;
                     this.isLocked = bool.Parse(parts[2]);
 
-                    if (parts.Length >= 6)
-                    {
-                        hotkeyMods = uint.Parse(parts[3]);
-                        hotkeyVk = uint.Parse(parts[4]);
-                        hotkeyName = parts[5];
-                    }
+                    // 兼容旧版本 config：跳过位置 3/4/5 的 hotkey 字段，dotaPath 位于位置 6
                     if (parts.Length >= 7)
                     {
                         dotaPath = parts[6];
+                    }
+                    else if (parts.Length >= 4)
+                    {
+                        dotaPath = parts[3];
                     }
                 }
                 else { this.Left = 200; this.Top = 60; }
@@ -338,10 +364,9 @@ namespace Dota2NetWorth
         {
             try 
             {
-                // 保存前确保坐标有效
                 double l = this.Left;
                 double t = this.Top;
-                File.WriteAllText("config.txt", string.Format("{0},{1},{2},{3},{4},{5},{6}", l, t, this.isLocked, hotkeyMods, hotkeyVk, hotkeyName, dotaPath)); 
+                File.WriteAllText("config.txt", string.Format("{0},{1},{2},,,,{3}", l, t, this.isLocked, dotaPath)); 
             } 
             catch { }
         }
@@ -537,30 +562,28 @@ namespace Dota2NetWorth
             return null;
         }
 
-        private void InitTrayIcon()
-        {
-            trayIcon = new System.Windows.Forms.NotifyIcon();
-            trayIcon.Icon = System.Drawing.Icon.ExtractAssociatedIcon(Assembly.GetExecutingAssembly().Location);
-            trayIcon.Text = "Dota2 资产助手";
-            trayIcon.Visible = true;
-
-            var menu = new System.Windows.Forms.ContextMenuStrip();
-
-            // --- 绑定修改快捷键功能 ---
-            menu.Items.Add(string.Format("修改快捷键 (当前: {0})", hotkeyName), null, (s, e) => OpenHotkeyDialog());
-
-            menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
-            menu.Items.Add("退出插件", null, (s, e) => {
-                trayIcon.Dispose();
-                Environment.Exit(0);
-            });
-            trayIcon.ContextMenuStrip = menu;
-        }
-
         protected override void OnClosed(EventArgs e)
         {
             UnregisterHotKey(new WindowInteropHelper(this).Handle, HOTKEY_ID);
             base.OnClosed(e);
+        }
+
+        private void EnsureAutoStart()
+        {
+            try
+            {
+                string exePath = Process.GetCurrentProcess().MainModule.FileName;
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true))
+                {
+                    if (key == null) return;
+                    string existing = key.GetValue("Dota2NetWorth") as string;
+                    if (!string.Equals(existing, exePath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        key.SetValue("Dota2NetWorth", exePath);
+                    }
+                }
+            }
+            catch { }
         }
     }
 }
