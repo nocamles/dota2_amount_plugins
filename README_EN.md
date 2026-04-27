@@ -24,8 +24,8 @@ In Dota 2, players often need to manually calculate or check the scoreboard to e
     *   **GSI Cache Pool**: Solves the data fluctuation issue caused by GSI's delta updates.
     *   **Multi-threading**: Separates the HTTP server, UI thread, and Dota 2 process monitor.
 *   **Interaction**:
-    *   Global hotkey support (Default: `Ctrl+Alt+F10`).
-    *   Persistent configuration (`config.txt`) for window position, lock state, and hotkeys.
+    *   Global hotkey (**fixed at `Ctrl+Alt+F10`** to toggle lock/unlock).
+    *   Persistent configuration (`config.json`) for window position, lock state, Dota path, and auto-start switch.
 
 ## ✨ Features
 
@@ -34,9 +34,10 @@ In Dota 2, players often need to manually calculate or check the scoreboard to e
     *   Automatically hides when Dota 2 is not running or the player is in the main menu.
     *   Only shows during matches or Demo mode.
 *   **Custom Positioning**: Supports dragging when unlocked; supports click-through when locked to avoid interfering with game clicks.
-*   **Global Hotkey**: Toggle Lock/Unlock state instantly with a key combination.
+*   **Global Hotkey**: Toggle Lock/Unlock with `Ctrl+Alt+F10` (not customizable in current version).
 *   **Auto GSI Configuration**: No manual setup required. GSI configs are automatically deployed upon running.
-*   **System Tray Support**: Run in background with tray icon for quick settings and exit.
+*   **Configurable Auto-Start**: Enabled by default; disable by setting `AutoStart` to `false` in `config.json`.
+*   **Error Logging**: Runtime errors are written to `app.log` (1MB rolling) next to the executable for easy diagnosis.
 
 ## 📸 Screenshots
 

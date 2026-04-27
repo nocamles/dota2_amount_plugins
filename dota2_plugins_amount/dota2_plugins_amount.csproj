@@ -7,7 +7,7 @@
     <ProjectGuid>{4002AD10-EDE2-4F4D-B890-F60885FEF599}</ProjectGuid>
     <OutputType>WinExe</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>dota2_plugins_amount</RootNamespace>
+    <RootNamespace>Dota2NetWorth</RootNamespace>
     <AssemblyName>dota2_plugins_amount</AssemblyName>
     <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
@@ -90,6 +90,19 @@
       <DependentUpon>MainWindow.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Services\Logger.cs" />
+    <Compile Include="Services\PathProvider.cs" />
+    <Compile Include="Services\AppConfig.cs" />
+    <Compile Include="Services\AutoStartManager.cs" />
+    <Compile Include="Services\ItemPriceDb.cs" />
+    <Compile Include="Services\GsiSnapshot.cs" />
+    <Compile Include="Services\GsiParser.cs" />
+    <Compile Include="Services\NetWorthCalculator.cs" />
+    <Compile Include="Services\GsiServer.cs" />
+    <Compile Include="Services\ProcessWatcher.cs" />
+    <Compile Include="Services\HotKeyManager.cs" />
+    <Compile Include="Services\DotaPathLocator.cs" />
+    <Compile Include="ViewModels\NetWorthViewModel.cs" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Properties\AssemblyInfo.cs">
